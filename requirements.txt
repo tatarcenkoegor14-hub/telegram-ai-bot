@@ -1,3 +1,5 @@
 python-dotenv
 python-telegram-bot
 huggingface_hub
+pypdf
+python-docx
