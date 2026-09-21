@@ -1,8 +1,8 @@
-```python
 import os
-from dotenv import load_dotenv
+import asyncio
 
-load_dotenv()
+from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -10,15 +10,15 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
-from huggingface_hub import InferenceClient
-
 
 # =========================
-# НАСТРОЙКИ
+# ЗАГРУЗКА ПЕРЕМЕННЫХ
 # =========================
+
+load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -54,14 +54,14 @@ client = InferenceClient(
 
 
 # =========================
-# УКРАИНСКИЙ ИНТЕРФЕЙС
+# УКРАИНСКАЯ КЛАВИАТУРА
 # =========================
 
 keyboard = [
     ["💬 Поставити запитання"],
     ["🎙️ Голосовий помічник"],
     ["🌐 Мова"],
-    ["ℹ️ Про бота"]
+    ["ℹ️ Про бота"],
 ]
 
 reply_keyboard = ReplyKeyboardMarkup(
@@ -71,7 +71,7 @@ reply_keyboard = ReplyKeyboardMarkup(
 
 
 # =========================
-# /start
+# /START
 # =========================
 
 async def start(
@@ -79,13 +79,21 @@ async def start(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    text = (
+        "🇺🇦 Вітаю! Я твій AI-помічник.\n\n"
+        "🤖 Я можу:\n"
+        "• відповідати на запитання;\n"
+        "• спілкуватися різними мовами;\n"
+        "• розпізнавати голосові повідомлення;\n"
+        "• допомагати з навчанням та інформацією.\n\n"
+        "🌍 Просто напиши мені повідомлення "
+        "будь-якою мовою — я постараюся відповісти "
+        "тією ж мовою.\n\n"
+        "🎙️ Також можеш надіслати голосове повідомлення."
+    )
+
     await update.message.reply_text(
-        "🇺🇦 Вітаю!\n\n"
-        "Я твій AI-помічник.\n\n"
-        "💬 Можеш поставити мені запитання.\n"
-        "🎙️ Можеш надіслати голосове повідомлення.\n"
-        "🌍 Я можу спілкуватися різними мовами.\n\n"
-        "Просто напиши мені повідомлення 👇",
+        text,
         reply_markup=reply_keyboard
     )
 
@@ -94,43 +102,63 @@ async def start(
 # AI
 # =========================
 
-def ask_ai(question):
+async def ask_ai(question: str) -> str:
 
-    response = client.chat.completions.create(
-        model=CHAT_MODEL,
-        messages=[
+    try:
+
+        messages = [
             {
                 "role": "system",
                 "content": (
-                    "Ти дружній універсальний AI-помічник. "
-                    "Відповідай зрозуміло, корисно та природно.\n\n"
+                    "Ти дружелюбний багатомовний AI-помічник. "
+                    "Відповідай зрозуміло, корисно та природно. "
 
-                    "ВАЖЛИВО:\n"
-                    "1. Визначай мову повідомлення користувача.\n"
-                    "2. Відповідай тією самою мовою.\n"
-                    "3. Якщо користувач пише українською — "
-                    "відповідай українською.\n"
-                    "4. Якщо користувач пише англійською — "
-                    "відповідай англійською.\n"
-                    "5. Якщо користувач пише німецькою — "
-                    "відповідай німецькою.\n"
-                    "6. Якщо користувач пише польською — "
-                    "відповідай польською.\n"
-                    "7. Якщо користувач використовує іншу мову — "
-                    "намагайся відповідати цією ж мовою.\n"
-                    "8. Не перекладай запит без потреби.\n"
-                    "9. Не повідомляй користувачу, яку мову ти визначив."
+                    "ВАЖЛИВО: визнач мову повідомлення користувача "
+                    "та відповідай тією ж мовою. "
+
+                    "Якщо користувач пише українською — відповідай "
+                    "українською. "
+
+                    "Якщо російською — російською. "
+
+                    "Якщо англійською — англійською. "
+
+                    "Якщо користувач використовує іншу мову, "
+                    "намагайся відповідати цією ж мовою. "
+
+                    "Не змінюй мову без причини. "
+                    "Якщо користувач просить перекласти текст, "
+                    "виконай його прохання."
                 )
             },
             {
                 "role": "user",
                 "content": question
             }
-        ],
-        max_tokens=500
-    )
+        ]
 
-    return response.choices[0].message.content
+        response = client.chat_completion(
+            messages=messages,
+            model=CHAT_MODEL,
+            max_tokens=1000,
+            temperature=0.7
+        )
+
+        answer = response.choices[0].message.content
+
+        if not answer:
+            return "❌ AI не зміг сформувати відповідь."
+
+        return answer
+
+    except Exception as e:
+
+        print("AI ERROR:", e)
+
+        return (
+            "❌ Сталася помилка під час звернення до AI.\n"
+            "Спробуй ще раз через декілька секунд."
+        )
 
 
 # =========================
@@ -142,67 +170,63 @@ async def text_message(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    try:
+    if not update.message:
+        return
 
-        question = update.message.text
+    user_text = update.message.text
 
-        print("Користувач:", question)
-
-        # Кнопки інтерфейсу
-        if question == "💬 Поставити запитання":
-
-            await update.message.reply_text(
-                "💬 Напиши своє запитання 👇"
-            )
-            return
-
-        if question == "🎙️ Голосовий помічник":
-
-            await update.message.reply_text(
-                "🎙️ Надішли мені голосове повідомлення, "
-                "і я його розпізнаю."
-            )
-            return
-
-        if question == "🌐 Мова":
-
-            await update.message.reply_text(
-                "🌐 Мову відповіді я визначаю автоматично.\n\n"
-                "Напиши українською — відповім українською.\n"
-                "Write in English — I will answer in English.\n"
-                "Schreib auf Deutsch — ich antworte auf Deutsch.\n"
-                "Napisz po polsku — odpowiem po polsku."
-            )
-            return
-
-        if question == "ℹ️ Про бота":
-
-            await update.message.reply_text(
-                "🤖 AI-помічник\n\n"
-                "💬 Розуміє текстові повідомлення\n"
-                "🎙️ Розпізнає голосові повідомлення\n"
-                "🌍 Підтримує різні мови\n"
-                "🇺🇦 Має український інтерфейс"
-            )
-            return
-
-        # Запит до AI
-        answer = ask_ai(question)
+    # Кнопка запитання
+    if user_text == "💬 Поставити запитання":
 
         await update.message.reply_text(
-            answer
+            "💬 Напиши своє запитання, і я спробую допомогти."
         )
 
-    except Exception as e:
+        return
 
-        print(
-            "Помилка AI:",
-            repr(e)
-        )
+    # Кнопка голосового помічника
+    if user_text == "🎙️ Голосовий помічник":
 
         await update.message.reply_text(
-            "❌ Сталася помилка під час звернення до AI."
+            "🎙️ Надішли мені голосове повідомлення.\n\n"
+            "Я розпізнаю його та передам текст AI."
         )
+
+        return
+
+    # Кнопка мови
+    if user_text == "🌐 Мова":
+
+        await update.message.reply_text(
+            "🌍 Мова визначається автоматично.\n\n"
+            "Просто напиши мені українською, "
+            "російською, англійською або іншою мовою — "
+            "я постараюся відповісти тією ж мовою."
+        )
+
+        return
+
+    # Кнопка про бота
+    if user_text == "ℹ️ Про бота":
+
+        await update.message.reply_text(
+            "🤖 AI-помічник\n\n"
+            "🇺🇦 Інтерфейс: українська\n"
+            "🌍 Відповіді: багатомовні\n"
+            "🎙️ Голос: підтримується\n"
+            "🧠 AI: Hugging Face"
+        )
+
+        return
+
+    # Показуємо, що бот думає
+    await update.message.chat.send_action(
+        action="typing"
+    )
+
+    answer = await ask_ai(user_text)
+
+    await update.message.reply_text(answer)
 
 
 # =========================
@@ -214,69 +238,73 @@ async def voice_message(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    if not update.message or not update.message.voice:
+        return
+
     try:
 
         await update.message.reply_text(
-            "🎙️ Слухаю..."
+            "🎙️ Отримав голосове повідомлення.\n"
+            "⏳ Розпізнаю..."
         )
 
-        voice = update.message.voice
+        # Отримуємо файл Telegram
+        voice_file = await update.message.voice.get_file()
 
-        telegram_file = await context.bot.get_file(
-            voice.file_id
-        )
+        # Завантажуємо його в пам'ять
+        audio_data = await voice_file.download_as_bytearray()
 
-        audio_data = await telegram_file.download_as_bytearray()
-
-        result = client.automatic_speech_recognition(
+        # Розпізнаємо голос
+        transcription = client.automatic_speech_recognition(
             audio=bytes(audio_data),
             model=VOICE_MODEL
         )
 
-        recognized_text = result.text
+        # Отримуємо текст
+        recognized_text = transcription.text
 
-        print(
-            "Розпізнано:",
-            recognized_text
-        )
+        if not recognized_text:
+
+            await update.message.reply_text(
+                "❌ Не вдалося розпізнати голос."
+            )
+
+            return
 
         await update.message.reply_text(
-            "📝 Я почув:\n\n"
-            + recognized_text
+            f"📝 Я почув:\n\n{recognized_text}\n\n"
+            "🤖 Думаю над відповіддю..."
         )
 
         # Передаємо розпізнаний текст AI
-        answer = ask_ai(
-            recognized_text
-        )
+        answer = await ask_ai(recognized_text)
 
-        await update.message.reply_text(
-            answer
-        )
+        await update.message.reply_text(answer)
 
     except Exception as e:
 
-        print(
-            "Помилка голосу:",
-            repr(e)
-        )
+        print("VOICE ERROR:", e)
 
         await update.message.reply_text(
-            "❌ Не вдалося розпізнати голосове повідомлення."
+            "❌ Не вдалося обробити голосове повідомлення.\n"
+            "Спробуй записати його ще раз."
         )
 
 
 # =========================
-# ЗАПУСК
+# ЗАПУСК БОТА
 # =========================
 
-def main():
+async def main():
 
-    app = Application.builder().token(
-        TELEGRAM_TOKEN
-    ).build()
+    app = (
+        Application
+        .builder()
+        .token(TELEGRAM_TOKEN)
+        .build()
+    )
 
-    # /start
+    # Команда /start
     app.add_handler(
         CommandHandler(
             "start",
@@ -284,7 +312,7 @@ def main():
         )
     )
 
-    # Голосові повідомлення
+    # Голосовые сообщения
     app.add_handler(
         MessageHandler(
             filters.VOICE,
@@ -292,7 +320,7 @@ def main():
         )
     )
 
-    # Текстові повідомлення
+    # Обычные текстовые сообщения
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -300,26 +328,31 @@ def main():
         )
     )
 
-    print(
-        "🤖 AI-помічник запущений!"
-    )
+    print("=================================")
+    print("🤖 AI-помічник запущений!")
+    print("🇺🇦 Український інтерфейс: OK")
+    print("🌍 Багатомовний режим: OK")
+    print("🎙️ Голосовий режим: OK")
+    print("🚂 Railway mode: OK")
+    print("=================================")
 
-    print(
-        "🇺🇦 Український інтерфейс: OK"
-    )
+    # Запускаємо Telegram Application вручну.
+    # Це обходить проблему Event loop is closed
+    # на Railway.
 
-    print(
-        "🌍 Багатомовний режим: OK"
-    )
+    await app.initialize()
 
-    print(
-        "🎙️ Голос: OK"
-    )
+    await app.start()
 
-    app.run_polling()
+    await app.updater.start_polling()
+
+    # Не дозволяємо програмі завершитися.
+    await asyncio.Event().wait()
 
 
 # =========================
-# START
+# ЗАПУСК
 # =========================
-```
+
+if __name__ == "__main__":
+    asyncio.run(main())
