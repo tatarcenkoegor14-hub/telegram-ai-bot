@@ -1,9 +1,10 @@
+```python
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -26,7 +27,10 @@ CHAT_MODEL = "openai/gpt-oss-120b"
 VOICE_MODEL = "openai/whisper-large-v3"
 
 
-# Проверяем наличие токенов
+# =========================
+# ПРОВЕРКА ТОКЕНОВ
+# =========================
+
 if not TELEGRAM_TOKEN:
     raise ValueError(
         "Не найден TELEGRAM_TOKEN. "
@@ -40,13 +44,34 @@ if not HF_TOKEN:
     )
 
 
+# =========================
+# HUGGING FACE
+# =========================
+
 client = InferenceClient(
     api_key=HF_TOKEN
 )
 
 
 # =========================
-# КОМАНДА /start
+# УКРАИНСКИЙ ИНТЕРФЕЙС
+# =========================
+
+keyboard = [
+    ["💬 Поставити запитання"],
+    ["🎙️ Голосовий помічник"],
+    ["🌐 Мова"],
+    ["ℹ️ Про бота"]
+]
+
+reply_keyboard = ReplyKeyboardMarkup(
+    keyboard,
+    resize_keyboard=True
+)
+
+
+# =========================
+# /start
 # =========================
 
 async def start(
@@ -55,12 +80,13 @@ async def start(
 ):
 
     await update.message.reply_text(
-        "Привет! 👋\n\n"
-        "Я твой AI-помощник.\n\n"
-        "💬 Отвечаю на сообщения\n"
-        "🎙️ Распознаю голосовые сообщения\n"
-        "🇺🇦 Поддерживаю украинский язык\n"
-        "🇷🇺 Поддерживаю русский язык"
+        "🇺🇦 Вітаю!\n\n"
+        "Я твій AI-помічник.\n\n"
+        "💬 Можеш поставити мені запитання.\n"
+        "🎙️ Можеш надіслати голосове повідомлення.\n"
+        "🌍 Я можу спілкуватися різними мовами.\n\n"
+        "Просто напиши мені повідомлення 👇",
+        reply_markup=reply_keyboard
     )
 
 
@@ -76,16 +102,24 @@ def ask_ai(question):
             {
                 "role": "system",
                 "content": (
-                    "Ты дружелюбный AI-помощник. "
-                    "Отвечай понятно и кратко. "
-                    "Определи язык сообщения пользователя "
-                    "и отвечай на том же языке. "
-                    "Если пользователь пишет на украинском — "
-                    "отвечай на украинском. "
-                    "Если пользователь пишет на русском — "
-                    "отвечай на русском. "
-                    "Если пользователь пишет на английском — "
-                    "отвечай на английском."
+                    "Ти дружній універсальний AI-помічник. "
+                    "Відповідай зрозуміло, корисно та природно.\n\n"
+
+                    "ВАЖЛИВО:\n"
+                    "1. Визначай мову повідомлення користувача.\n"
+                    "2. Відповідай тією самою мовою.\n"
+                    "3. Якщо користувач пише українською — "
+                    "відповідай українською.\n"
+                    "4. Якщо користувач пише англійською — "
+                    "відповідай англійською.\n"
+                    "5. Якщо користувач пише німецькою — "
+                    "відповідай німецькою.\n"
+                    "6. Якщо користувач пише польською — "
+                    "відповідай польською.\n"
+                    "7. Якщо користувач використовує іншу мову — "
+                    "намагайся відповідати цією ж мовою.\n"
+                    "8. Не перекладай запит без потреби.\n"
+                    "9. Не повідомляй користувачу, яку мову ти визначив."
                 )
             },
             {
@@ -100,7 +134,7 @@ def ask_ai(question):
 
 
 # =========================
-# ТЕКСТОВЫЕ СООБЩЕНИЯ
+# ТЕКСТОВІ ПОВІДОМЛЕННЯ
 # =========================
 
 async def text_message(
@@ -112,8 +146,47 @@ async def text_message(
 
         question = update.message.text
 
-        print("Пользователь:", question)
+        print("Користувач:", question)
 
+        # Кнопки інтерфейсу
+        if question == "💬 Поставити запитання":
+
+            await update.message.reply_text(
+                "💬 Напиши своє запитання 👇"
+            )
+            return
+
+        if question == "🎙️ Голосовий помічник":
+
+            await update.message.reply_text(
+                "🎙️ Надішли мені голосове повідомлення, "
+                "і я його розпізнаю."
+            )
+            return
+
+        if question == "🌐 Мова":
+
+            await update.message.reply_text(
+                "🌐 Мову відповіді я визначаю автоматично.\n\n"
+                "Напиши українською — відповім українською.\n"
+                "Write in English — I will answer in English.\n"
+                "Schreib auf Deutsch — ich antworte auf Deutsch.\n"
+                "Napisz po polsku — odpowiem po polsku."
+            )
+            return
+
+        if question == "ℹ️ Про бота":
+
+            await update.message.reply_text(
+                "🤖 AI-помічник\n\n"
+                "💬 Розуміє текстові повідомлення\n"
+                "🎙️ Розпізнає голосові повідомлення\n"
+                "🌍 Підтримує різні мови\n"
+                "🇺🇦 Має український інтерфейс"
+            )
+            return
+
+        # Запит до AI
         answer = ask_ai(question)
 
         await update.message.reply_text(
@@ -123,17 +196,17 @@ async def text_message(
     except Exception as e:
 
         print(
-            "Ошибка AI:",
+            "Помилка AI:",
             repr(e)
         )
 
         await update.message.reply_text(
-            "❌ Произошла ошибка при обращении к AI."
+            "❌ Сталася помилка під час звернення до AI."
         )
 
 
 # =========================
-# ГОЛОСОВЫЕ СООБЩЕНИЯ
+# ГОЛОСОВІ ПОВІДОМЛЕННЯ
 # =========================
 
 async def voice_message(
@@ -144,7 +217,7 @@ async def voice_message(
     try:
 
         await update.message.reply_text(
-            "🎙️ Слушаю..."
+            "🎙️ Слухаю..."
         )
 
         voice = update.message.voice
@@ -163,15 +236,16 @@ async def voice_message(
         recognized_text = result.text
 
         print(
-            "Распознано:",
+            "Розпізнано:",
             recognized_text
         )
 
         await update.message.reply_text(
-            "📝 Я услышал:\n\n"
+            "📝 Я почув:\n\n"
             + recognized_text
         )
 
+        # Передаємо розпізнаний текст AI
         answer = ask_ai(
             recognized_text
         )
@@ -183,12 +257,12 @@ async def voice_message(
     except Exception as e:
 
         print(
-            "Ошибка голоса:",
+            "Помилка голосу:",
             repr(e)
         )
 
         await update.message.reply_text(
-            "❌ Не получилось распознать голос."
+            "❌ Не вдалося розпізнати голосове повідомлення."
         )
 
 
@@ -210,7 +284,7 @@ def main():
         )
     )
 
-    # Голос
+    # Голосові повідомлення
     app.add_handler(
         MessageHandler(
             filters.VOICE,
@@ -218,7 +292,7 @@ def main():
         )
     )
 
-    # Текст
+    # Текстові повідомлення
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -227,15 +301,15 @@ def main():
     )
 
     print(
-        "🤖 AI-помощник запущен!"
+        "🤖 AI-помічник запущений!"
     )
 
     print(
-        "🇺🇦 Українська мова: OK"
+        "🇺🇦 Український інтерфейс: OK"
     )
 
     print(
-        "🇷🇺 Русский язык: OK"
+        "🌍 Багатомовний режим: OK"
     )
 
     print(
@@ -248,53 +322,4 @@ def main():
 # =========================
 # START
 # =========================
-
-if __name__ == "__main__":
-    main()
-    if not HF_TOKEN:
-        raise ValueError(
-            "Не найден HF_TOKEN"
-        )
-
-    app = Application.builder().token(
-        TELEGRAM_TOKEN
-    ).build()
-
-    # Команда /start
-    app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
-    )
-
-    # Голосовые сообщения
-    app.add_handler(
-        MessageHandler(
-            filters.VOICE,
-            voice_message
-        )
-    )
-
-    # Обычный текст
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            text_message
-        )
-    )
-
-    print(
-        "🤖 AI-помощник запущен!"
-    )
-
-    # Постоянная работа бота
-    app.run_polling()
-
-
-# =========================
-# START
-# =========================
-
-if __name__ == "__main__":
-    main()
+```
